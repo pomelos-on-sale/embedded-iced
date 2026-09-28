@@ -47,7 +47,11 @@ mod renderer {
     pub type Compositor = iced_tiny_skia::window::Compositor;
 }
 
-#[cfg(not(any(feature = "wgpu-bare", feature = "tiny-skia", feature = "custom")))]
+#[cfg(not(any(
+    feature = "wgpu-bare",
+    feature = "tiny-skia",
+    feature = "custom"
+)))]
 mod renderer {
     #[cfg(not(debug_assertions))]
     compile_error!(
@@ -64,7 +68,10 @@ mod renderer {
 /// never used. A [`Renderer`] still has to be named, because the unit type only implements the
 /// renderer traits under `debug_assertions` -- which is the real reason the guard above exists,
 /// and why opting out of it has to mean "use this one" rather than "use nothing".
-#[cfg(all(feature = "custom", not(any(feature = "wgpu-bare", feature = "tiny-skia"))))]
+#[cfg(all(
+    feature = "custom",
+    not(any(feature = "wgpu-bare", feature = "tiny-skia"))
+))]
 mod renderer {
     pub type Renderer = iced_tiny_skia::Renderer;
     pub type Compositor = ();
