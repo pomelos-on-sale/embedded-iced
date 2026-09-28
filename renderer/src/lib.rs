@@ -47,17 +47,36 @@ mod renderer {
     pub type Compositor = iced_tiny_skia::window::Compositor;
 }
 
+/// The integrator brings its own surface, its own compositor *and* its own renderer: ours is
+/// `iced-pomelo-gfx`, which records a frame's commands rather than rasterising them, so that the
+/// platform layer can replay them into a panel that is not a window. The unit type is still the
+/// compositor name for the same reason as below -- neither this crate nor iced's facade ever
+/// instantiates it when the surface belongs to someone else.
+///
+/// This takes precedence over `custom` below, and the two are otherwise the same idea. A build of
+/// this stack has both on: `custom` is how the host says "we bring the surface", `pomelo` is how it
+/// says the renderer is ours.
+#[cfg(all(
+    feature = "pomelo",
+    not(any(feature = "wgpu-bare", feature = "tiny-skia"))
+))]
+mod renderer {
+    pub type Renderer = iced_pomelo_gfx::Renderer;
+    pub type Compositor = ();
+}
+
 #[cfg(not(any(
     feature = "wgpu-bare",
     feature = "tiny-skia",
-    feature = "custom"
+    feature = "custom",
+    feature = "pomelo"
 )))]
 mod renderer {
     #[cfg(not(debug_assertions))]
     compile_error!(
         "Cannot compile `iced_renderer` in release mode \
         without a renderer feature enabled. \
-        Enable either the `wgpu` or `tiny-skia` feature, or both."
+        Enable one of the `wgpu`, `tiny-skia` or `pomelo` features."
     );
 
     pub type Renderer = ();
@@ -70,6 +89,7 @@ mod renderer {
 /// and why opting out of it has to mean "use this one" rather than "use nothing".
 #[cfg(all(
     feature = "custom",
+    not(feature = "pomelo"),
     not(any(feature = "wgpu-bare", feature = "tiny-skia"))
 ))]
 mod renderer {
