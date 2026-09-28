@@ -1,5 +1,12 @@
 #![allow(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+
+/// The window compositor, built on `softbuffer`.
+///
+/// Desktop-only, and off by default here: softbuffer cannot build for ESP-IDF. A
+/// platform that has no window manager drives [`Renderer::draw`] itself and presents
+/// the damaged regions on its own.
+#[cfg(feature = "softbuffer")]
 pub mod window;
 
 mod engine;
@@ -30,10 +37,13 @@ pub use geometry::Geometry;
 
 use crate::core::renderer;
 use crate::core::{
-    Background, Color, Font, Pixels, Point, Rectangle, Size, Transformation,
+    Background, Color, Font, Pixels, Point, Rectangle, Transformation,
 };
+#[cfg(feature = "softbuffer")]
+use crate::core::Size;
 use crate::engine::Engine;
 use crate::graphics::Viewport;
+#[cfg(feature = "softbuffer")]
 use crate::graphics::compositor;
 use crate::graphics::text::{Editor, Paragraph};
 
@@ -427,10 +437,17 @@ impl core::svg::Renderer for Renderer {
     }
 }
 
+/// The platform-backend half of the crate.
+///
+/// It needs a window compositor, and the only one iced ships is built on `softbuffer`.
+/// Without that feature this crate is a *renderer*: a platform owns the pixel buffer,
+/// calls [`Renderer::draw`], and presents the damaged regions itself.
+#[cfg(feature = "softbuffer")]
 impl compositor::Default for Renderer {
     type Compositor = window::Compositor;
 }
 
+#[cfg(feature = "softbuffer")]
 impl renderer::Headless for Renderer {
     async fn new(
         default_font: Font,
