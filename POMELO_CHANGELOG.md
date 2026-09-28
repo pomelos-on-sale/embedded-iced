@@ -4,16 +4,16 @@ What this fork changes relative to upstream `iced-rs/iced`.
 
 `pomelo-os` runs iced on an ESP32-S3: Xtensa LX7, 32-bit, ESP-IDF, no window
 system and no GPU. iced does not support that target out of the box, and the
-five commits below are the whole of what it took.
+six commits below are the whole of what it took.
 They live on the `pomelo/esp32s3` branch; `0.14` (the upstream branch) stays
 clean, so following upstream is one `git rebase` and conflicts can only land in
-the eight files listed here.
+the ten files listed here.
 
 **Baseline:** upstream `0.14` at `38237dd2` -- *Fix event loop spin on stale
 redraw deadlines in `winit` shell*, one commit past the `0.14.1` release.
 
-**Delta:** 5 commits, 8 files, +58 / -15 -- the changelog commit that adds
-this file is not counted.
+**Delta:** 6 commits, 10 files, +187 / -33 -- of which `Cargo.lock` accounts
+for +86 / -17. The changelog commit that adds this file is not counted.
 
 | Commit | Change | Why |
 | --- | --- | --- |
@@ -22,6 +22,7 @@ this file is not counted.
 | `6721ee56e` | new `custom` feature on `iced_renderer` | a platform that brings its own renderer cannot select one of iced's |
 | `16f920205` | `custom` names a renderer instead of skipping one | the unit renderer has no impls in release |
 | `53d2cd633` | `rustfmt` the `cfg` attributes above | -- |
+| `e4fa2373d` | new `pomelo` feature on `iced_renderer` | the renderer an app names has to be the one that draws it |
 
 Nothing here changes desktop behaviour. Every change is either behind a target
 capability, or behind a new feature, or in the path only a platform without a
@@ -102,14 +103,47 @@ reason the guard exists, and the comment on it says so now.
 
 `53d2cd633` is `rustfmt` on the `cfg` attributes the other two added.
 
+## A renderer of your own
+
+`e4fa2373d` · `Cargo.toml`, `renderer/Cargo.toml`, `renderer/src/lib.rs`
+
+`custom` says the integrator brings a surface and a compositor, but it still
+leaves the *renderer* to `iced_tiny_skia`, and that turned out to be the end of
+the story an app could accept. An app names its renderer exactly once --
+`type Renderer = iced::Renderer`, which the facade re-exports from this crate --
+so with `custom` it writes its whole widget tree against a renderer nobody
+draws with. On a board where the platform layer *is* the renderer, that is the
+one name that cannot be left at the default.
+
+The `pomelo` feature names `iced-pomelo-gfx` instead. It wins over `custom`
+when both are on, which is the combination a real build has: `custom` says "the
+surface is ours", `pomelo` says "and the renderer is". `iced_renderer`'s own
+`Compositor` alias stays `()` in both cases -- when the surface belongs to
+someone else, neither this crate nor the facade ever instantiates it.
+
+It arrives as a **git dependency**, not a path: the renderer is a repository of
+its own (`pomelos-on-sale/iced-pomelo-gfx`), and this fork has no business
+knowing where `pomelo-os` checks it out. `pomelo-os` patches that URL back to
+its submodule, so a build there uses the checkout that is open and local edits
+are live; the `Cargo.lock` here pins a revision for anyone building this fork on
+its own.
+
+One thing to know about patching a git source: Cargo fetches it anyway. It has
+to see what the source contains before it can substitute anything for it, so
+the first resolve on a machine needs access to that repository even though the
+compiled code will be the local path. `pomelo-os` sets
+`net.git-fetch-with-cli = true` for this and explains the rest in
+`vendor/README.md`.
+
 ## Still open
 
 `custom` names `iced_tiny_skia`'s `Renderer`, so a `custom` build still compiles
 `iced_tiny_skia`, and with it the tiny-skia rasteriser, even though the platform
-draws through its own renderer. Making that go away means changing what
-`iced_widget` defaults its renderer to in release, which is a wider patch than
-this fork wants to carry before the recorded renderer has replaced tiny-skia for
-real.
+draws through its own renderer. `pomelo` does not change that: it only wins the
+*name*, and `custom` is still what pulls the crate in for the defaults.
+Removing it entirely means the fork stops needing `iced_tiny_skia` -- its
+renderer, its rasteriser and its layers -- which is worth doing once the
+recorded renderer has replaced tiny-skia for real.
 
 ## Updating
 
@@ -123,13 +157,13 @@ git push origin pomelo/esp32s3 --force-with-lease
 Then record the new commit in `pomelo-os`:
 
 ```bash
-git -C ../.. add vendor/embedded-iced
-git -C ../.. commit -m "vendor: bump embedded-iced"
+git -C ../.. add vendor/iced
+git -C ../.. commit -m "vendor: bump iced"
 ```
 
 ## Where this is used
 
 `pomelo-os` consumes the fork as a path patch: `[patch.crates-io]` in its root
-`Cargo.toml` points every `iced_*` crate at `vendor/embedded-iced/*`, and the
-submodule pins this branch. `vendor/README.md` in that repository explains why
-the forks are excluded from its workspace and what the update procedure is.
+`Cargo.toml` points every `iced_*` crate at `vendor/iced/*`, and the submodule
+pins this branch. `vendor/README.md` in that repository explains why the forks
+are excluded from its workspace and what the update procedure is.
