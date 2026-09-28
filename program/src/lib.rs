@@ -681,6 +681,17 @@ impl<P: Program> Instance<P> {
         self.program.title(&self.state, window)
     }
 
+    /// The state the program is in, for a host that owns the loop around it.
+    ///
+    /// iced's own loop never looks at this: a program is driven through `view`, `update` and
+    /// `subscription`, and the whole point of `Program` is that the platform does not know what the
+    /// state is. But the loop here *is* the platform — a board with one panel, a status bar the
+    /// firmware fills in, a test that has to say what the app did — and a host that cannot see what
+    /// it is hosting cannot report on it. Reading is all this grants.
+    pub fn state(&self) -> &P::State {
+        &self.state
+    }
+
     /// Processes the given message and updates the [`Instance`].
     pub fn update(&mut self, message: P::Message) -> Task<P::Message> {
         self.program.update(&mut self.state, message)
