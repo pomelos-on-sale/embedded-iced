@@ -2,7 +2,7 @@
 use std::cell::RefCell;
 use std::fmt;
 use std::mem;
-use std::sync::atomic::{self, AtomicU64};
+use std::sync::atomic::{self, AtomicUsize};
 
 /// A simple cache that stores generated values to avoid recomputation.
 ///
@@ -89,10 +89,10 @@ pub struct Group {
 impl Group {
     /// Generates a new unique cache [`Group`].
     pub fn unique() -> Self {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
 
         Self {
-            id: NEXT.fetch_add(1, atomic::Ordering::Relaxed),
+            id: NEXT.fetch_add(1, atomic::Ordering::Relaxed) as u64,
             is_singleton: false,
         }
     }

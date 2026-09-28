@@ -208,11 +208,13 @@ enum _Id {
 
 impl Id {
     fn unique() -> Self {
-        use std::sync::atomic::{self, AtomicU64};
+        use std::sync::atomic::{self, AtomicUsize};
 
-        static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+        static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
-        Self(_Id::Unique(NEXT_ID.fetch_add(1, atomic::Ordering::Relaxed)))
+        Self(_Id::Unique(
+            NEXT_ID.fetch_add(1, atomic::Ordering::Relaxed) as u64
+        ))
     }
 
     fn path(path: impl AsRef<Path>) -> Self {
