@@ -17,6 +17,11 @@ workspace = true
 wgpu = ["iced_wgpu/default"]
 wgpu-bare = ["iced_wgpu"]
 tiny-skia = ["iced_tiny_skia"]
+# The integrator supplies the renderer themselves, so this crate's `Renderer`/`Compositor`
+# aliases are not used. It exists to make that a deliberate choice: `iced_widget` depends on
+# this crate only to forward features, and without it a release build of a platform that brings
+# its own renderer fails the guard below.
+custom = []
 image = ["iced_tiny_skia?/image", "iced_wgpu?/image"]
 svg = ["iced_tiny_skia?/svg", "iced_wgpu?/svg"]
 geometry = ["iced_graphics/geometry", "iced_tiny_skia?/geometry", "iced_wgpu?/geometry"]

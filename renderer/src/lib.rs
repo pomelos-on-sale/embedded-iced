@@ -49,7 +49,10 @@ mod renderer {
 
 #[cfg(not(any(feature = "wgpu-bare", feature = "tiny-skia")))]
 mod renderer {
-    #[cfg(not(debug_assertions))]
+    // The guard stays for everyone who did not ask for it: a release image where `Renderer` is
+    // a unit type is a mistake. `custom` says the integrator supplies the renderer, which is
+    // exactly what an embedded platform layer does -- nothing here ever names these aliases.
+    #[cfg(not(any(debug_assertions, feature = "custom")))]
     compile_error!(
         "Cannot compile `iced_renderer` in release mode \
         without a renderer feature enabled. \
