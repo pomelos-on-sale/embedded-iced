@@ -4,7 +4,7 @@ What this fork changes relative to upstream `iced-rs/iced`.
 
 `pomelo-os` runs iced on an ESP32-S3: Xtensa LX7, 32-bit, ESP-IDF, no window
 system and no GPU. iced does not support that target out of the box, and the
-six commits below are the whole of what it took.
+seven commits below are the whole of what it took.
 They live on the `pomelo/esp32s3` branch; `0.14` (the upstream branch) stays
 clean, so following upstream is one `git rebase` and conflicts can only land in
 the ten files listed here.
@@ -12,7 +12,7 @@ the ten files listed here.
 **Baseline:** upstream `0.14` at `38237dd2` -- *Fix event loop spin on stale
 redraw deadlines in `winit` shell*, one commit past the `0.14.1` release.
 
-**Delta:** 6 commits, 10 files, +187 / -33 -- of which `Cargo.lock` accounts
+**Delta:** 7 commits, 10 files, +198 / -36 -- of which `Cargo.lock` accounts
 for +86 / -17. The changelog commit that adds this file is not counted.
 
 | Commit | Change | Why |
@@ -23,6 +23,7 @@ for +86 / -17. The changelog commit that adds this file is not counted.
 | `16f920205` | `custom` names a renderer instead of skipping one | the unit renderer has no impls in release |
 | `53d2cd633` | `rustfmt` the `cfg` attributes above | -- |
 | `e4fa2373d` | new `pomelo` feature on `iced_renderer` | the renderer an app names has to be the one that draws it |
+| `ce26bceb9` | `x11`/`wayland` stop implying softbuffer | the facade demands one of them, and this target is `unix` with neither |
 
 Nothing here changes desktop behaviour. Every change is either behind a target
 capability, or behind a new feature, or in the path only a platform without a
@@ -134,6 +135,34 @@ the first resolve on a machine needs access to that repository even though the
 compiled code will be the local path. `pomelo-os` sets
 `net.git-fetch-with-cli = true` for this and explains the rest in
 `vendor/README.md`.
+
+## A display-server feature, on a board with no display server
+
+`ce26bceb9` · `tiny_skia/Cargo.toml`
+
+iced's facade refuses to compile on unix when neither `x11` nor `wayland` is
+enabled:
+
+```rust
+#[cfg(all(target_family = "unix", not(target_os = "macos"), not(feature = "wayland"), not(feature = "x11")))]
+compile_error!("No Unix display server backend has been enabled. ...");
+```
+
+An ESP32-S3 is `unix` (`target_family = "unix"`, `target_vendor =
+"espressif"`), so a program written for iced has to name one of them to build
+here at all -- even though the board has no display server, no window, and
+nothing to put in one. That is already odd; what made it impossible is that
+naming it *pulled `softbuffer` in*, because `x11 = ["softbuffer/x11", ...]`
+enables an optional dependency rather than forwarding a feature to it, and
+softbuffer has no ESP-IDF backend.
+
+The end of that road was a second patch, to the guard itself, saying "not on this
+OS". `softbuffer?/x11` is better, and is the same class of fix as `7bba303c6`:
+the feature is forwarded when the dependency is there, and means nothing when it
+is not. `softbuffer` moves into `default = ["x11", "wayland", "softbuffer"]`
+so that a desktop build keeps exactly what it had, and an app can now write
+`iced = { default-features = false, features = ["thread-pool", "x11"] }` and
+have the whole display-server half of the graph be inert on this board.
 
 ## Still open
 
