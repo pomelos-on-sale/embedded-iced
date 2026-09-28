@@ -47,12 +47,9 @@ mod renderer {
     pub type Compositor = iced_tiny_skia::window::Compositor;
 }
 
-#[cfg(not(any(feature = "wgpu-bare", feature = "tiny-skia")))]
+#[cfg(not(any(feature = "wgpu-bare", feature = "tiny-skia", feature = "custom")))]
 mod renderer {
-    // The guard stays for everyone who did not ask for it: a release image where `Renderer` is
-    // a unit type is a mistake. `custom` says the integrator supplies the renderer, which is
-    // exactly what an embedded platform layer does -- nothing here ever names these aliases.
-    #[cfg(not(any(debug_assertions, feature = "custom")))]
+    #[cfg(not(debug_assertions))]
     compile_error!(
         "Cannot compile `iced_renderer` in release mode \
         without a renderer feature enabled. \
@@ -60,5 +57,15 @@ mod renderer {
     );
 
     pub type Renderer = ();
+    pub type Compositor = ();
+}
+
+/// The integrator brings its own surface and compositor, so this crate's `Compositor` alias is
+/// never used. A [`Renderer`] still has to be named, because the unit type only implements the
+/// renderer traits under `debug_assertions` -- which is the real reason the guard above exists,
+/// and why opting out of it has to mean "use this one" rather than "use nothing".
+#[cfg(all(feature = "custom", not(any(feature = "wgpu-bare", feature = "tiny-skia"))))]
+mod renderer {
+    pub type Renderer = iced_tiny_skia::Renderer;
     pub type Compositor = ();
 }
