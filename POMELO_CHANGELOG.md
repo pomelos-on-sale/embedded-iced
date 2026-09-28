@@ -4,7 +4,7 @@ What this fork changes relative to upstream `iced-rs/iced`.
 
 `pomelo-os` runs iced on an ESP32-S3: Xtensa LX7, 32-bit, ESP-IDF, no window
 system and no GPU. iced does not support that target out of the box, and the
-seven commits below are the whole of what it took.
+eight commits below are the whole of what it took.
 They live on the `pomelo/esp32s3` branch; `0.14` (the upstream branch) stays
 clean, so following upstream is one `git rebase` and conflicts can only land in
 the ten files listed here.
@@ -12,8 +12,9 @@ the ten files listed here.
 **Baseline:** upstream `0.14` at `38237dd2` -- *Fix event loop spin on stale
 redraw deadlines in `winit` shell*, one commit past the `0.14.1` release.
 
-**Delta:** 7 commits, 10 files, +198 / -36 -- of which `Cargo.lock` accounts
-for +86 / -17. The changelog commit that adds this file is not counted.
+**Delta:** 8 commits, 11 files, +209 / -36 -- of which `Cargo.lock` accounts
+for +86 / -17. The changelog commit that adds this file is not counted, nor are
+the two that extend it.
 
 | Commit | Change | Why |
 | --- | --- | --- |
@@ -24,6 +25,7 @@ for +86 / -17. The changelog commit that adds this file is not counted.
 | `53d2cd633` | `rustfmt` the `cfg` attributes above | -- |
 | `e4fa2373d` | new `pomelo` feature on `iced_renderer` | the renderer an app names has to be the one that draws it |
 | `ce26bceb9` | `x11`/`wayland` stop implying softbuffer | the facade demands one of them, and this target is `unix` with neither |
+| `7cee9d5b5` | `Instance::state()` | the platform holds the state here, and has to report on it |
 
 Nothing here changes desktop behaviour. Every change is either behind a target
 capability, or behind a new feature, or in the path only a platform without a
@@ -164,6 +166,20 @@ so that a desktop build keeps exactly what it had, and an app can now write
 `iced = { default-features = false, features = ["thread-pool", "x11"] }` and
 have the whole display-server half of the graph be inert on this board.
 
+## Reading the state of a hosted program
+
+`7cee9d5b5` · `program/src/lib.rs`
+
+`Program` is opaque to the platform by design: a program is driven through
+`view`, `update` and `subscription`, and nothing outside it is supposed to know
+what its state is. iced's own loop never needs to.
+
+Here the loop *is* the platform -- one panel, a status bar the firmware fills
+in, test suites that have to assert what an app did -- and a host that cannot
+see the state it hosts cannot report on it. `Instance::state()` is one read-only
+accessor; nothing else about the contract moves, and no desktop code path uses
+it.
+
 ## Still open
 
 `custom` names `iced_tiny_skia`'s `Renderer`, so a `custom` build still compiles
@@ -192,7 +208,10 @@ git -C ../.. commit -m "vendor: bump iced"
 
 ## Where this is used
 
-`pomelo-os` consumes the fork as a path patch: `[patch.crates-io]` in its root
-`Cargo.toml` points every `iced_*` crate at `vendor/iced/*`, and the submodule
-pins this branch. `vendor/README.md` in that repository explains why the forks
-are excluded from its workspace and what the update procedure is.
+`pomelo-os` consumes the fork as a path patch: `[patch.crates-io]` points every
+`iced_*` crate at `vendor/iced/*`, and the submodule pins this branch. That
+repository has no manifest at its own root, so the table is written three times
+-- `vendor/Cargo.toml` (the libraries), `firmware/panel-tests` and
+`firmware/components/rust_main` -- because cargo reads `[patch]` only from the
+root of a dependency graph. `vendor/README.md` there explains why the forks are
+excluded from its workspace and what the update procedure is.
