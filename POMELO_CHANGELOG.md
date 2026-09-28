@@ -1,0 +1,135 @@
+# Pomelo changelog
+
+What this fork changes relative to upstream `iced-rs/iced`.
+
+`pomelo-os` runs iced on an ESP32-S3: Xtensa LX7, 32-bit, ESP-IDF, no window
+system and no GPU. iced does not support that target out of the box, and the
+five commits below are the whole of what it took.
+They live on the `pomelo/esp32s3` branch; `0.14` (the upstream branch) stays
+clean, so following upstream is one `git rebase` and conflicts can only land in
+the eight files listed here.
+
+**Baseline:** upstream `0.14` at `38237dd2` -- *Fix event loop spin on stale
+redraw deadlines in `winit` shell*, one commit past the `0.14.1` release.
+
+**Delta:** 5 commits, 8 files, +58 / -15 -- the changelog commit that adds
+this file is not counted.
+
+| Commit | Change | Why |
+| --- | --- | --- |
+| `5b365a543` | id counters use `AtomicUsize` | the target has no 64-bit atomics |
+| `7bba303c6` | `softbuffer` is optional in `iced_tiny_skia` | softbuffer cannot build for ESP-IDF |
+| `6721ee56e` | new `custom` feature on `iced_renderer` | a platform that brings its own renderer cannot select one of iced's |
+| `16f920205` | `custom` names a renderer instead of skipping one | the unit renderer has no impls in release |
+| `53d2cd633` | `rustfmt` the `cfg` attributes above | -- |
+
+Nothing here changes desktop behaviour. Every change is either behind a target
+capability, or behind a new feature, or in the path only a platform without a
+window system takes.
+
+## Pointer-width atomics for the id counters
+
+`5b365a543` · `core/src/window/id.rs`, `core/src/image.rs`,
+`graphics/src/cache.rs`, `graphics/src/mesh.rs`
+
+Xtensa does not have 64-bit atomics:
+
+```
+$ rustc +esp --print cfg --target xtensa-esp32s3-espidf | grep target_has_atomic
+target_has_atomic="8"
+target_has_atomic="16"
+target_has_atomic="32"
+target_has_atomic="ptr"
+```
+
+`AtomicU64` is therefore not a type that exists there, and `iced_core` and
+`iced_graphics` do not compile at all -- std has no runtime fallback of the
+libatomic kind. This is an architecture limit rather than a codegen backend
+problem: `riscv32imac-esp-espidf` is identical.
+
+All four counters exist to hand out a unique id, so they are `AtomicUsize` now:
+the widest *native* atomic the target has. On a target with 64-bit atomics that
+is the same 64 bits as before; it narrows only where nothing wider exists. The
+counter is widened back to `u64` at its single construction site, so the public
+`Id(u64)` types and their `serde` representations are untouched.
+
+(The widening is written `usize as u64` rather than `u64::from`: `core` has no
+`From<usize>` for `u64`, only widenings between fixed-width types.)
+
+## The window compositor is optional
+
+`7bba303c6` · `tiny_skia/Cargo.toml`, `tiny_skia/src/lib.rs`
+
+`iced_tiny_skia` depends on `softbuffer` unconditionally, and softbuffer has no
+ESP-IDF backend -- its "unsupported platform" fallback does not even compile.
+
+`softbuffer` is an optional dependency behind a `softbuffer` feature now, and
+that feature gates `pub mod window`, the `compositor::Default` and
+`renderer::Headless` impls, and the `Size` and `compositor` imports those two
+are the only users of. `x11` and `wayland` still enable it, so desktop builds
+are unchanged.
+
+What remains without it is a pure *renderer*: the platform owns the pixel buffer,
+calls `Renderer::draw`, and presents the damaged regions itself -- which is
+exactly what `pomelo-iced-backend` does.
+
+## A way for an integrator to bring its own renderer
+
+`6721ee56e`, `16f920205`, `53d2cd633` · `renderer/Cargo.toml`,
+`renderer/src/lib.rs`
+
+`iced_renderer` refuses to build in release mode when neither `wgpu` nor
+`tiny-skia` is selected, because `Renderer` would be `()`. The guard is right: a
+release image whose renderer is a unit type is a mistake worth failing on.
+
+It is a mistake for the wrong reason in one case, though -- an integrator that
+supplies the renderer itself and never names these aliases at all, which is what
+an embedded platform layer does. `iced_widget` depends on this crate only to
+forward features, so such a platform cannot avoid compiling it.
+
+So the guard gains an explicit way out rather than losing its teeth: the new
+`custom` feature says "not one of yours", and everyone who has not asked for it
+still gets the error.
+
+Silencing the `compile_error!` is not enough to make that configuration build,
+which is what `16f920205` corrects. The unit renderer is a
+`debug_assertions`-only stub -- `core/src/renderer/null.rs` implements the
+renderer traits for `()` and nothing does in release -- so `iced_widget`, whose
+widgets default their `Renderer` to this crate's alias, failed with 25
+trait-bound errors instead. `custom` now names `iced_tiny_skia`'s renderer and
+still supplies no compositor, because the integrator has one. That is the real
+reason the guard exists, and the comment on it says so now.
+
+`53d2cd633` is `rustfmt` on the `cfg` attributes the other two added.
+
+## Still open
+
+`custom` names `iced_tiny_skia`'s `Renderer`, so a `custom` build still compiles
+`iced_tiny_skia`, and with it the tiny-skia rasteriser, even though the platform
+draws through its own renderer. Making that go away means changing what
+`iced_widget` defaults its renderer to in release, which is a wider patch than
+this fork wants to carry before the recorded renderer has replaced tiny-skia for
+real.
+
+## Updating
+
+```bash
+git remote add upstream https://github.com/iced-rs/iced.git   # once
+git fetch upstream
+git rebase upstream/0.14
+git push origin pomelo/esp32s3 --force-with-lease
+```
+
+Then record the new commit in `pomelo-os`:
+
+```bash
+git -C ../.. add vendor/embedded-iced
+git -C ../.. commit -m "vendor: bump embedded-iced"
+```
+
+## Where this is used
+
+`pomelo-os` consumes the fork as a path patch: `[patch.crates-io]` in its root
+`Cargo.toml` points every `iced_*` crate at `vendor/embedded-iced/*`, and the
+submodule pins this branch. `vendor/README.md` in that repository explains why
+the forks are excluded from its workspace and what the update procedure is.
