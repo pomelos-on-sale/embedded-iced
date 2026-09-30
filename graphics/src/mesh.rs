@@ -6,7 +6,7 @@ use crate::gradient;
 use bytemuck::{Pod, Zeroable};
 
 use std::sync::Arc;
-use std::sync::atomic::{self, AtomicU64};
+use std::sync::atomic::{self, AtomicUsize};
 
 /// A low-level primitive to render a mesh of triangles.
 #[derive(Debug, Clone, PartialEq)]
@@ -160,10 +160,10 @@ pub struct Id(u64);
 impl Cache {
     /// Creates a new [`Cache`] for the given meshes.
     pub fn new(meshes: Arc<[Mesh]>) -> Self {
-        static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+        static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
         Self {
-            id: Id(NEXT_ID.fetch_add(1, atomic::Ordering::Relaxed)),
+            id: Id(NEXT_ID.fetch_add(1, atomic::Ordering::Relaxed) as u64),
             batch: meshes,
             version: 0,
         }

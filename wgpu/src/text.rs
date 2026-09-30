@@ -9,7 +9,7 @@ use crate::nudge;
 
 use rustc_hash::FxHashMap;
 use std::collections::hash_map;
-use std::sync::atomic::{self, AtomicU64};
+use std::sync::atomic::{self, AtomicUsize};
 use std::sync::{self, Arc, RwLock};
 
 pub use crate::graphics::Text;
@@ -47,14 +47,14 @@ pub struct Id(u64);
 
 impl Cache {
     pub fn new(group: cache::Group, text: Vec<Text>) -> Option<Self> {
-        static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+        static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
         if text.is_empty() {
             return None;
         }
 
         Some(Self {
-            id: Id(NEXT_ID.fetch_add(1, atomic::Ordering::Relaxed)),
+            id: Id(NEXT_ID.fetch_add(1, atomic::Ordering::Relaxed) as u64),
             group,
             text: Arc::from(text),
             version: 0,

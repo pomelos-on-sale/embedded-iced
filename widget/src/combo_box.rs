@@ -74,7 +74,7 @@ use crate::text::LineHeight;
 use crate::text_input;
 
 use std::fmt::Display;
-use std::sync::atomic::{self, AtomicU64};
+use std::sync::atomic::{self, AtomicUsize};
 
 /// A widget for searching and selecting a single value from a list of options.
 ///
@@ -327,10 +327,10 @@ where
 #[derive(Debug, Clone)]
 pub struct State<T> {
     options: Vec<T>,
-    version: u64,
+    version: usize,
 }
 
-static VERSION: AtomicU64 = AtomicU64::new(0);
+static VERSION: AtomicUsize = AtomicUsize::new(0);
 
 impl<T> State<T>
 where
@@ -379,7 +379,7 @@ struct Internal<T, R: text::Renderer> {
     hovered_option: Option<usize>,
     option_matchers: Vec<String>,
     filtered_options: Vec<T>,
-    version: u64,
+    version: usize,
 }
 
 impl<T: Display + Clone, R: text::Renderer> Internal<T, R> {
