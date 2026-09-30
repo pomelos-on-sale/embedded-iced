@@ -4,17 +4,17 @@ What this fork changes relative to upstream `iced-rs/iced`.
 
 `pomelo-os` runs iced on an ESP32-S3: Xtensa LX7, 32-bit, ESP-IDF, no window
 system and no GPU. iced does not support that target out of the box, and the
-eight commits below are the whole of what it took.
+nine commits below are the whole of what it took.
 They live on the `pomelo/esp32s3` branch; `0.14` (the upstream branch) stays
 clean, so following upstream is one `git rebase` and conflicts can only land in
-the ten files listed here.
+the twelve files listed here.
 
 **Baseline:** upstream `0.14` at `38237dd2` -- *Fix event loop spin on stale
 redraw deadlines in `winit` shell*, one commit past the `0.14.1` release.
 
-**Delta:** 8 commits, 11 files, +209 / -36 -- of which `Cargo.lock` accounts
+**Delta:** 9 commits, 12 files, +218 / -37 -- of which `Cargo.lock` accounts
 for +86 / -17. The changelog commit that adds this file is not counted, nor are
-the two that extend it.
+the three that extend it.
 
 | Commit | Change | Why |
 | --- | --- | --- |
@@ -26,10 +26,13 @@ the two that extend it.
 | `e4fa2373d` | new `pomelo` feature on `iced_renderer` | the renderer an app names has to be the one that draws it |
 | `ce26bceb9` | `x11`/`wayland` stop implying softbuffer | the facade demands one of them, and this target is `unix` with neither |
 | `7cee9d5b5` | `Instance::state()` | the platform holds the state here, and has to report on it |
+| `e7d6194c1` | `load_font` stops copying its argument | the `Arc` it goes into never needed to own the bytes |
 
-Nothing here changes desktop behaviour. Every change is either behind a target
-capability, or behind a new feature, or in the path only a platform without a
-window system takes.
+Nothing here changes what is drawn. Every change but one is behind a target
+capability, behind a new feature, or in the path only a platform without a
+window system takes. The exception is the font copy (`e7d6194c1` below): it is
+not conditional on anything, because the copy it removes was never a decision --
+a desktop program that installs a font paid it too.
 
 ## Pointer-width atomics for the id counters
 
@@ -179,6 +182,44 @@ in, test suites that have to assert what an app did -- and a host that cannot
 see the state it hosts cannot report on it. `Instance::state()` is one read-only
 accessor; nothing else about the contract moves, and no desktop code path uses
 it.
+
+## A borrowed font stays borrowed
+
+`e7d6194c1` · `graphics/src/text.rs`
+
+`FontSystem::load_font` takes a `Cow<'static, [u8]>` and called
+`into_owned()` on it before handing the bytes to `fontdb`. For an
+`include_bytes!` face -- the normal case for a program that carries its own
+font, and the only case on this board -- that allocates a copy of the whole
+font on the heap, and `fontdb` keeps the `Arc` for the life of the process.
+
+Nothing required it. `Source::Binary` holds an `Arc<dyn AsRef<[u8]>>` and only
+ever borrows from it, and `font_system()` in the same file has always passed
+the two built-in faces as slices:
+
+```rust
+cosmic_text::fontdb::Source::Binary(Arc::new(
+    include_bytes!("../fonts/Iced-Icons.ttf").as_slice(),
+)),
+```
+
+`Cow<'static, [u8]>` implements `AsRef<[u8]>` itself, so it goes in as it is:
+the borrowed arm keeps pointing at `.rodata`, and the owned arm was already on
+the heap. There was never a type here that needed the bytes to be owned.
+
+Measured on the board's own path, with the suite that counts every byte the Rust
+side asks the allocator for (`firmware/panel-tests/tests/font_memory_tests.rs`):
+
+```
+font db, 38 face(s) installed   1798122 B  ->  14698 B
+```
+
+The 1,798,122 B was this board's font -- the 1.8 MB Source Han Sans SC subset --
+copied out of flash into PSRAM and held there for the life of the process. A
+font a program installs now costs its size in flash and nothing in RAM.
+
+What this does not change is what is drawn: where a font's bytes live is not
+where they are read from.
 
 ## Still open
 
