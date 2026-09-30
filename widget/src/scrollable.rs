@@ -933,6 +933,23 @@ where
                                 Interaction::TouchScrolling(position);
                         }
                         touch::Event::FingerMoved { .. } => {
+                            // If FingerPressed was captured by a child widget (e.g. a
+                            // button), TouchScrolling was never started. Lazily initialise
+                            // it here from the current cursor position so that a drag
+                            // starting on a button still scrolls the list — the standard
+                            // mobile-first gesture.
+                            if !matches!(
+                                state.interaction,
+                                Interaction::TouchScrolling(_)
+                            ) {
+                                if let Some(position) = cursor_over_scrollable {
+                                    state.interaction =
+                                        Interaction::TouchScrolling(position);
+                                } else {
+                                    return;
+                                }
+                            }
+
                             let Interaction::TouchScrolling(
                                 scroll_box_touched_at,
                             ) = state.interaction
