@@ -16,7 +16,7 @@ workspace = true
 [features]
 wgpu = ["iced_wgpu/default"]
 wgpu-bare = ["iced_wgpu"]
-tiny-skia = ["iced_tiny_skia"]
+tiny-skia = ["iced_tiny_skia", "iced_tiny_skia/softbuffer"]
 # The integrator brings its own surface and compositor, but `iced_widget`'s defaults still need
 # a concrete renderer: `()` only implements the renderer traits under `debug_assertions`, so a
 # release build cannot leave this crate without one. Ours is `iced_tiny_skia`'s.
